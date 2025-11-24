@@ -8,7 +8,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
 
-namespace MordorFormats
+namespace MordorFormats.LTAR
 {
     public class LtarReader : IDisposable
     {
@@ -132,7 +132,7 @@ namespace MordorFormats
         private static void CheckChunkHeader(int chunkCompSize, int chunkSize)
         {
             // If the chunk header specifies impossible values, throw an exception
-            if ((chunkCompSize < 0 || chunkSize < 0) || (chunkCompSize > MaxChunkSize || chunkSize > MaxChunkSize))
+            if (chunkCompSize < 0 || chunkSize < 0 || chunkCompSize > MaxChunkSize || chunkSize > MaxChunkSize)
             {
                 throw new Exception("Compressed chunk header corrupted.");
             }

@@ -1,7 +1,7 @@
 ﻿using Edoke.IO;
 
 
-namespace MordorFormats
+namespace MordorFormats.LTAR
 {
     public class LtarFolder
     {
