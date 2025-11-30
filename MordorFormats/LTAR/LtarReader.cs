@@ -10,20 +10,60 @@ using System.Runtime.CompilerServices;
 
 namespace MordorFormats.LTAR
 {
+    /// <summary>
+    /// A reader for lithtech archives.
+    /// </summary>
     public class LtarReader : IDisposable
     {
+        /// <summary>
+        /// The max uncompressed size of chunks.
+        /// </summary>
         private const int MaxChunkSize = 65536;
+
+        /// <summary>
+        /// The offset paths always begin at.
+        /// </summary>
         private const int PathsOffset = 48;
 
+        /// <summary>
+        /// The underlying stream reader.
+        /// </summary>
         private readonly BinaryStreamReader Reader;
+
+        /// <summary>
+        /// Whether or not this reader has been disposed.
+        /// </summary>
         private bool disposedValue;
 
+        /// <summary>
+        /// Whether or not this lithtech archive is big endian.
+        /// </summary>
         public bool BigEndian { get; set; }
+
+        /// <summary>
+        /// The version of this lithtech archive.
+        /// </summary>
         public int Version { get; set; }
+
+        /// <summary>
+        /// Unknown; Always 1.
+        /// </summary>
         public int Unk14 { get; set; }
+
+        /// <summary>
+        /// The files contained within this lithtech archive.
+        /// </summary>
         public List<LtarFile> Files { get; set; }
+
+        /// <summary>
+        /// The folders contained within this lithtech archive.
+        /// </summary>
         public List<LtarFolder> Folders { get; set; }
 
+        /// <summary>
+        /// Reads a lithtech archive from a stream.
+        /// </summary>
+        /// <param name="br">The stream reader.</param>
         private LtarReader(BinaryStreamReader br)
         {
             Reader = br;
@@ -56,6 +96,11 @@ namespace MordorFormats.LTAR
 
         #region Is
 
+        /// <summary>
+        /// Whether or not the specified data is detected as a lithtech archive.
+        /// </summary>
+        /// <param name="br">The stream reader.</param>
+        /// <returns>Whether or not the specified data is detected as a lithtech archive.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool Is(BinaryStreamReader br)
         {
@@ -63,6 +108,11 @@ namespace MordorFormats.LTAR
             return magic == "LTAR" || magic == "RATL";
         }
 
+        /// <summary>
+        /// Whether or not the specified data is detected as a lithtech archive.
+        /// </summary>
+        /// <param name="path">The file path to the data.</param>
+        /// <returns>Whether or not the specified data is detected as a lithtech archive.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Is(string path)
         {
@@ -74,6 +124,12 @@ namespace MordorFormats.LTAR
 
         #region IsRead
 
+        /// <summary>
+        /// Reads the specified file as a lithtech archive if it is detected as one.
+        /// </summary>
+        /// <param name="path">The path to read from.</param>
+        /// <param name="reader">The opened reader if applicable.</param>
+        /// <returns>Whether or not the specified data was detected as a lithtech archive, and a reader opened.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsRead(string path, [NotNullWhen(true)] out LtarReader? reader)
         {
@@ -93,6 +149,11 @@ namespace MordorFormats.LTAR
 
         #region Read
 
+        /// <summary>
+        /// Reads a lithtech archive from the specified file path.
+        /// </summary>
+        /// <param name="path">The file path to open for reading as a lithtech archive.</param>
+        /// <returns>A reader for a lithtech archive.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static LtarReader Read(string path)
             => new LtarReader(new BinaryStreamReader(path));
@@ -101,6 +162,13 @@ namespace MordorFormats.LTAR
 
         #region ReadFile
 
+        /// <summary>
+        /// Reads the specified file entry and decompresses it.<br/>
+        /// Using this method is not recommended, prefer the streaming method as files may be too large.
+        /// </summary>
+        /// <param name="file">The file entry.</param>
+        /// <returns>The decompressed file data.</returns>
+        /// <exception cref="InvalidOperationException"></exception>
         public byte[] ReadFile(LtarFile file)
         {
             if (file.CompressedSize > int.MaxValue || file.Size > int.MaxValue)
@@ -116,6 +184,11 @@ namespace MordorFormats.LTAR
             return decompressedBytes;
         }
 
+        /// <summary>
+        /// Reads the specified file entry and decompresses it to the specified output stream.
+        /// </summary>
+        /// <param name="file">The file entry.</param>
+        /// <param name="output">The output stream.</param>
         public void ReadFile(LtarFile file, Stream output)
         {
             Reader.Seek(file.Offset);
@@ -128,13 +201,19 @@ namespace MordorFormats.LTAR
 
         #region Check Chunk Header
 
+        /// <summary>
+        /// Check if a chunk header is valid.
+        /// </summary>
+        /// <param name="chunkCompSize">The chunk compressed size.</param>
+        /// <param name="chunkSize">The chunk original size.</param>
+        /// <exception cref="Exception">The data was invalid.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void CheckChunkHeader(int chunkCompSize, int chunkSize)
         {
             // If the chunk header specifies impossible values, throw an exception
             if (chunkCompSize < 0 || chunkSize < 0 || chunkCompSize > MaxChunkSize || chunkSize > MaxChunkSize)
             {
-                throw new Exception("Compressed chunk header corrupted.");
+                throw new InvalidDataException("Compressed chunk header corrupted.");
             }
         }
 
@@ -142,6 +221,12 @@ namespace MordorFormats.LTAR
 
         #region Decompress
 
+        /// <summary>
+        /// Decompresses the specified data to the specified destination.
+        /// </summary>
+        /// <param name="source">The data to decompress.</param>
+        /// <param name="dest">The destination to decompress to.</param>
+        /// <param name="bigEndian">Whether or not the data is big endian.</param>
         private void Decompress(ReadOnlySpan<byte> source, Span<byte> dest, bool bigEndian)
         {
             int size = dest.Length;
@@ -175,7 +260,14 @@ namespace MordorFormats.LTAR
             }
         }
 
-        private void Decompress(BinaryStreamReader br, BinaryStreamWriter bw, long offset, long size)
+        /// <summary>
+        /// Decompresses the specified data to the specified destination.
+        /// </summary>
+        /// <param name="br">The compressed data reader.</param>
+        /// <param name="bw">The decompressed data writer.</param>
+        /// <param name="fileOffset">The offset of the entire file being decompressed.</param>
+        /// <param name="size">The original file size.</param>
+        private void Decompress(BinaryStreamReader br, BinaryStreamWriter bw, long fileOffset, long size)
         {
             long read = 0;
 
@@ -199,7 +291,7 @@ namespace MordorFormats.LTAR
                 bw.WriteByteSpan(decompBuf);
 
                 // Align by 4 relative to the start of all chunks
-                br.AlignRelative(offset, 4);
+                br.AlignRelative(fileOffset, 4);
 
                 // Increment how much we've read so far
                 read += chunkSize;
@@ -213,6 +305,15 @@ namespace MordorFormats.LTAR
 
         #region Decompress Chunk
 
+        /// <summary>
+        /// Decompresses the specified chunk.
+        /// </summary>
+        /// <param name="source">The data to decompress.</param>
+        /// <param name="dest">The destination to decompress to.</param>
+        /// <param name="chunkCompSize">The chunk compressed size.</param>
+        /// <param name="chunkSize">The chunk original size.</param>
+        /// <exception cref="Exception">Decompression failed.</exception>
+        /// <exception cref="NotSupportedException">The version was unknown.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void DecompressChunk(ReadOnlySpan<byte> source, Span<byte> dest, int chunkCompSize, int chunkSize)
         {
@@ -238,14 +339,20 @@ namespace MordorFormats.LTAR
                     break;
                 case 4:
                     // Decompress with oodle and make sure it succeeded
-                    long oodleAmountDecomp = Oodle.GetOodleCompressor().Decompress(source, dest, OodleLZ_FuzzSafe.Yes, OodleLZ_CheckCRC.No, OodleLZ_Verbosity.None, OodleLZ_Decode_ThreadPhase.Unthreaded);
+#if DEBUG
+                    const OodleLZ_Verbosity verbosity = OodleLZ_Verbosity.None; // Set this for debugging as necessary
+#else
+                    const OodleLZ_Verbosity verbosity = OodleLZ_Verbosity.None;
+#endif
+
+                    long oodleAmountDecomp = Oodle.GetOodleCompressor().Decompress(source, dest, OodleLZ_FuzzSafe.Yes, OodleLZ_CheckCRC.No, verbosity, OodleLZ_Decode_ThreadPhase.Unthreaded);
                     if (oodleAmountDecomp != chunkSize)
                     {
                         throw new Exception("Chunked oodle decompression failure.");
                     }
                     break;
                 default:
-                    throw new NotSupportedException($"Unknown file version: {Version}");
+                    throw new NotSupportedException($"Unknown file version for chunk decompression: {Version}");
             }
         }
 
