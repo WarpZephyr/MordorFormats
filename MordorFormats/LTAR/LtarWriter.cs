@@ -22,6 +22,13 @@ namespace MordorFormats.LTAR
         /// </summary>
         public bool BigEndian { get; set; }
 
+        // I'm unsure I should provide direct enum access because the underlying API could change
+        // System.Compression.IO's API seems dumbed down for deflate compression level
+        /// <summary>
+        /// Whether or not to prefer smallest compression for zlib in versions supporting it.
+        /// </summary>
+        public bool UseMaxZlibCompressionLevel { get; set; }
+
         /// <summary>
         /// The oodle compressor to use in versions supporting it.
         /// </summary>
@@ -233,7 +240,7 @@ namespace MordorFormats.LTAR
             {
                 foreach (var file in node.EnumerateFiles())
                 {
-                    file.WriteData(bw, Version, fileIndex, OodleCompressor, OodleCompressionLevel);
+                    file.WriteData(bw, Version, fileIndex, UseMaxZlibCompressionLevel, OodleCompressor, OodleCompressionLevel);
                     fileIndex++;
                 }
 

@@ -4,6 +4,7 @@ using OodleCoreSharp;
 using System;
 using System.Buffers;
 using System.IO;
+using System.IO.Compression;
 using System.Runtime.CompilerServices;
 
 namespace MordorFormats.LTAR
@@ -81,9 +82,10 @@ namespace MordorFormats.LTAR
         /// <param name="bw">The stream writer.</param>
         /// <param name="version">The version of the lithtech archive.</param>
         /// <param name="index">The index of the file entry.</param>
+        /// <param name="zlibSmallest">Whether or not to prefer smallest compression for zlib if applicable.</param>
         /// <param name="compressor">The oodle compressor to use for this file if applicable.</param>
         /// <param name="level">The oodle compression level to use for this file if applicable.</param>
-        internal void WriteData(BinaryStreamWriter bw, int version, int index, OodleLZ_Compressor compressor, OodleLZ_CompressionLevel level)
+        internal void WriteData(BinaryStreamWriter bw, int version, int index, bool zlibSmallest, OodleLZ_Compressor compressor, OodleLZ_CompressionLevel level)
         {
             long fileOffset = bw.Position;
             bw.FillInt64($"FileOffset_{index}", fileOffset);
@@ -92,7 +94,7 @@ namespace MordorFormats.LTAR
             long fileSize = fs.Length;
             bw.FillInt64($"FileSize_{index}", fileSize);
 
-            Compress(fs, bw, version, fileOffset, fileSize, compressor, level);
+            Compress(fs, bw, version, fileOffset, fileSize, zlibSmallest, compressor, level);
 
             long fileEndOffset = bw.Position;
             long fileCompressedSize = fileEndOffset - fileOffset;
@@ -123,9 +125,10 @@ namespace MordorFormats.LTAR
         /// <param name="version">The version of the lithtech archive.</param>
         /// <param name="fileOffset">The offset of the file within the lithtech archive.</param>
         /// <param name="size">The original size of the file.</param>
+        /// <param name="zlibSmallest">Whether or not to prefer smallest compression for zlib if applicable.</param>
         /// <param name="compressor">The oodle compressor to use for this file if applicable.</param>
         /// <param name="level">The oodle compression level to use for this file if applicable.</param>
-        private static void Compress(FileStream fs, BinaryStreamWriter bw, int version, long fileOffset, long size, OodleLZ_Compressor compressor, OodleLZ_CompressionLevel level)
+        private static void Compress(FileStream fs, BinaryStreamWriter bw, int version, long fileOffset, long size, bool zlibSmallest, OodleLZ_Compressor compressor, OodleLZ_CompressionLevel level)
         {
             long remaining = size;
 
@@ -147,7 +150,7 @@ namespace MordorFormats.LTAR
                 // Read data
                 // Then compress it
                 fs.ReadExactly(readBuf);
-                int compChunkSize = CompressChunk(readBuf, rawWriteBuf, version, compressor, level);
+                int compChunkSize = CompressChunk(readBuf, rawWriteBuf, version, zlibSmallest, compressor, level);
                 if (compChunkSize >= chunkSize)
                 {
                     // If compressed size is greater than or equal to the original, just write the original
@@ -183,19 +186,20 @@ namespace MordorFormats.LTAR
         /// <param name="source">The data to compress.</param>
         /// <param name="dest">The destination to compress to; Currently will not be written to if compressed size is larger than or equal to original size.</param>
         /// <param name="version">The version of the lithtech archive.</param>
+        /// <param name="zlibSmallest">Whether or not to prefer smallest compression for zlib if applicable.</param>
         /// <param name="compressor">The oodle compressor to use for this chunk if applicable.</param>
         /// <param name="level">The oodle compression level to use for this chunk if applicable.</param>
         /// <returns>The amount compressed.</returns>
         /// <exception cref="NotSupportedException">The version was unknown.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int CompressChunk(ReadOnlySpan<byte> source, Span<byte> dest, int version, OodleLZ_Compressor compressor, OodleLZ_CompressionLevel level)
+        private static int CompressChunk(ReadOnlySpan<byte> source, Span<byte> dest, int version, bool zlibSmallest, OodleLZ_Compressor compressor, OodleLZ_CompressionLevel level)
         {
             int compChunkSize;
             switch (version)
             {
                 case 3:
                     // Compress with zlib
-                    compChunkSize = Zlib.Compress(source, dest, 0x78, 0xDA);
+                    compChunkSize = Zlib.Compress(source, dest, zlibSmallest ? CompressionLevel.SmallestSize : Deflate.DefaultCompressionLevel, 0x78, 0xDA);
                     break;
                 case 4:
                     // Compress with oodle

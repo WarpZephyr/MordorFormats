@@ -10,6 +10,11 @@ namespace MordorFormats.Compression
     internal static class Deflate
     {
         /// <summary>
+        /// The default compression level used for deflate writing.
+        /// </summary>
+        public const CompressionLevel DefaultCompressionLevel = CompressionLevel.Optimal;
+
+        /// <summary>
         /// Decompresses from the source to the destination.
         /// </summary>
         /// <param name="source">The source to decompress from.</param>
@@ -37,14 +42,15 @@ namespace MordorFormats.Compression
         /// </summary>
         /// <param name="source">The source to compress from.</param>
         /// <param name="destination">The destination to compress to.</param>
+        /// <param name="level">The compression level to use.</param>
         /// <returns>The amount compressed.</returns>
-        public static unsafe int Compress(ReadOnlySpan<byte> source, Span<byte> destination)
+        public static unsafe int Compress(ReadOnlySpan<byte> source, Span<byte> destination, CompressionLevel level)
         {
             fixed (byte* pSource = &source[0])
             {
                 using var inStream = new UnmanagedMemoryStream(pSource, source.Length);
                 using var outStream = new MemoryStream(destination.Length);
-                using var deflateStream = new DeflateStream(outStream, CompressionMode.Compress);
+                using var deflateStream = new DeflateStream(outStream, level);
                 inStream.CopyTo(deflateStream);
                 deflateStream.Flush();
 
